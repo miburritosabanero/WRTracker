@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mi Tracker de Ejercicio</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --accent: #38bdf8;
+      --text: #f8fafc;
+      --text-dim: #94a3b8;
+      --success: #22c55e;
+    }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 12px;
+      padding-bottom: 80px;
+    }
+    h1, h2, h3 { margin: 8px 0; }
+    .nav {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .nav button {
+      flex: 1;
+      padding: 10px;
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid #334155;
+      border-radius: 8px;
+      font-weight: bold;
+    }
+    .nav button.active {
+      background: var(--accent);
+      color: #000;
+    }
+    .card {
+      background: var(--card);
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 14px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);
+    }
+    .superset-title {
+      color: var(--accent);
+      font-size: 0.9em;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 10px;
+      border-bottom: 1px solid #334155;
+      padding-bottom: 4px;
+    }
+    .exercise-item {
+      margin-bottom: 12px;
+    }
+    .exercise-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .exercise-name { font-weight: 600; font-size: 1.05em; }
+    .ref-link { color: var(--accent); font-size: 0.8em; text-decoration: none; }
+    .set-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+      background: #0f172a;
+      padding: 6px 10px;
+      border-radius: 6px;
+    }
+    .set-row label { font-size: 0.85em; width: 45px; color: var(--text-dim); }
+    input[type="number"], input[type="text"], select {
+      background: #1e293b;
+      border: 1px solid #475569;
+      color: #fff;
+      padding: 6px 8px;
+      border-radius: 6px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .btn-main {
+      background: var(--success);
+      color: #000;
+      border: none;
+      width: 100%;
+      padding: 14px;
+      border-radius: 10px;
+      font-size: 1.1em;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+  </style>
+</head>
+<body>
+
+  <h1>🏋️‍♂️ Workout Tracker</h1>
+
+  <div class="nav">
+    <button id="tab1-btn" class="active" onclick="switchTab('entreno')">Entrenar</button>
+    <button id="tab2-btn" onclick="switchTab('progreso')">Evolución</button>
+  </div>
+
+  <!-- SECCIÓN 1: MODO ENTRENAMIENTO -->
+  <div id="entreno" class="tab-content active">
+    
+    <div class="card">
+      <label><b>Seleccionar Día:</b></label>
+      <select id="day-select" onchange="loadRoutine()" style="margin-top: 6px;">
+        <option value="DAY 1">DAY 1 - Pecho / Espalda / Core</option>
+        <option value="DAY 2">DAY 2 - Pierna / Core</option>
+        <option value="DAY 3">DAY 3 - Hombro / Brazo / Core</option>
+      </select>
+    </div>
+
+    <div id="routine-container"></div>
+
+    <!-- Cardio Secundario -->
+    <div class="card">
+      <div class="superset-title">🏃‍♂️ Cardio Final (Trote)</div>
+      <div style="display: flex; gap: 8px;">
+        <div>
+          <label style="font-size: 0.8em;">Distancia (km)</label>
+          <input type="number" id="cardio-dist" step="0.1" placeholder="Ej: 3.5">
+        </div>
+        <div>
+          <label style="font-size: 0.8em;">Pace (min/km)</label>
+          <input type="text" id="cardio-pace" placeholder="Ej: 5:20">
+        </div>
+      </div>
+    </div>
+
+    <button class="btn-main" onclick="saveWorkout()">Guardar Entrenamiento</button>
+  </div>
+
+  <!-- SECCIÓN 2: GRAFICOS Y EVOLUCIÓN -->
+  <div id="progreso" class="tab-content">
+    <div class="card">
+      <label><b>Selecciona Ejercicio para ver progreso:</b></label>
+      <select id="chart-exercise-select" onchange="updateChart()" style="margin-top: 6px;"></select>
+    </div>
+
+    <div class="card">
+      <canvas id="progressChart"></canvas>
+    </div>
+  </div>
+
+  <script>
+    // ⚠️ REEMPLAZA ESTA URL CON LA QUE COPIASTE DE TU APPS SCRIPT:
+    const SCRIPT_URL = "TU_URL_DE_GOOGLE_APPS_SCRIPT_AQUI";
+
+    const routines = {
+      "DAY 1": [
+        { superset: "Triset 1", name: "Bench Press", defaultReps: "8", ref: "" },
+        { superset: "Triset 1", name: "Chest-supported Row", defaultReps: "10-12", ref: "" },
+        { superset: "Triset 1", name: "Dead bug", defaultReps: "10/lado", ref: "" },
+        { superset: "Triset 2", name: "Inclined bench dumbbell", defaultReps: "10", ref: "" },
+        { superset: "Triset 2", name: "Dips", defaultReps: "10-12", ref: "" },
+        { superset: "Triset 2", name: "Plank", defaultReps: "40 seg", ref: "" }
+      ],
+      "DAY 2": [
+        { superset: "Triset 1", name: "Goblet / Bulgarian Split Squat", defaultReps: "10-12", ref: "" },
+        { superset: "Triset 1", name: "Hip Thrust / RDL", defaultReps: "10-12", ref: "" },
+        { superset: "Triset 1", name: "Pallof Press", defaultReps: "10/lado", ref: "" },
+        { superset: "Triset 2", name: "Unilateral Lunges", defaultReps: "10/lado", ref: "" },
+        { superset: "Triset 2", name: "Calf Raises", defaultReps: "15-20", ref: "" },
+        { superset: "Triset 2", name: "Nordic Curl", defaultReps: "8-10", ref: "" }
+      ],
+      "DAY 3": [
+        { superset: "Triset 1", name: "Militar Press", defaultReps: "10", ref: "" },
+        { superset: "Triset 1", name: "Close Grip Floor Press", defaultReps: "10-12", ref: "" },
+        { superset: "Triset 1", name: "Superman", defaultReps: "12", ref: "" },
+        { superset: "Triset 2", name: "Bicep Curl Supine", defaultReps: "10", ref: "" },
+        { superset: "Triset 2", name: "Halos", defaultReps: "20", ref: "" },
+        { superset: "Triset 2", name: "Dead Bugs", defaultReps: "10/lado", ref: "" }
+      ]
+    };
+
+    let chartInstance = null;
+    let historyData = [];
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+      document.getElementById(tabId).classList.add('active');
+      
+      if(tabId === 'entreno') document.getElementById('tab1-btn').classList.add('active');
+      if(tabId === 'progreso') {
+        document.getElementById('tab2-btn').classList.add('active');
+        fetchHistory();
+      }
+    }
+
+    function loadRoutine() {
+      const selectedDay = document.getElementById("day-select").value;
+      const container = document.getElementById("routine-container");
+      container.innerHTML = "";
+
+      const currentRoutine = routines[selectedDay];
+      let currentSuperset = "";
+      let currentCard = null;
+
+      currentRoutine.forEach((ex, idx) => {
+        if (ex.superset !== currentSuperset) {
+          currentSuperset = ex.superset;
+          currentCard = document.createElement("div");
+          currentCard.className = "card";
+          currentCard.innerHTML = `<div class="superset-title">${currentSuperset}</div>`;
+          container.appendChild(currentCard);
+        }
+
+        const exDiv = document.createElement("div");
+        exDiv.className = "exercise-item";
+        exDiv.innerHTML = `
+          <div class="exercise-header">
+            <span class="exercise-name">${ex.name} <small style="color:var(--text-dim)">(${ex.defaultReps})</small></span>
+          </div>
+          ${[1, 2, 3].map(set => `
+            <div class="set-row">
+              <label>Serie ${set}</label>
+              <input type="number" id="peso_${idx}_${set}" placeholder="Peso (kg)">
+              <input type="number" id="reps_${idx}_${set}" placeholder="Reps">
+            </div>
+          `).join('')}
+        `;
+        currentCard.appendChild(exDiv);
+      });
+    }
+
+    async function saveWorkout() {
+      const selectedDay = document.getElementById("day-select").value;
+      const currentRoutine = routines[selectedDay];
+      let ejercicios = [];
+
+      currentRoutine.forEach((ex, idx) => {
+        [1, 2, 3].forEach(set => {
+          const peso = document.getElementById(`peso_${idx}_${set}`).value;
+          const reps = document.getElementById(`reps_${idx}_${set}`).value;
+          if (peso || reps) {
+            ejercicios.push({
+              nombre: ex.name,
+              serie: set,
+              peso: peso || 0,
+              reps: reps || 0
+            });
+          }
+        });
+      });
+
+      const cardioDist = document.getElementById("cardio-dist").value;
+      const cardioPace = document.getElementById("cardio-pace").value;
+
+      if (ejercicios.length === 0 && !cardioDist) {
+        alert("Ingresa al menos un peso/repetición o datos de cardio.");
+        return;
+      }
+
+      const payload = {
+        dia: selectedDay,
+        ejercicios: ejercicios,
+        cardio: { distancia: cardioDist, pace: cardioPace }
+      };
+
+      try {
+        await fetch(SCRIPT_URL, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        alert("¡Entrenamiento guardado con éxito en Google Sheets! 💪");
+        loadRoutine();
+      } catch (e) {
+        alert("Error al guardar: " + e.toString());
+      }
+    }
+
+    async function fetchHistory() {
+      try {
+        const res = await fetch(SCRIPT_URL);
+        const data = await res.json();
+        historyData = data.slice(1); // Omitir encabezados
+
+        // Poblar selector de ejercicios para gráficos
+        const uniqueExercises = [...new Set(historyData.map(r => r[2]))];
+        const select = document.getElementById("chart-exercise-select");
+        select.innerHTML = uniqueExercises.map(ex => `<option value="${ex}">${ex}</option>`).join('');
+        
+        updateChart();
+      } catch(e) {
+        console.error("Error al obtener historial", e);
+      }
+    }
+
+    function updateChart() {
+      const selectedEx = document.getElementById("chart-exercise-select").value;
+      const filtered = historyData.filter(r => r[2] === selectedEx);
+
+      const labels = filtered.map(r => new Date(r[0]).toLocaleDateString());
+      const pesos = filtered.map(r => parseFloat(r[4]) || parseFloat(r[6]) || 0);
+
+      const ctx = document.getElementById('progressChart').getContext('2d');
+      if (chartInstance) chartInstance.destroy();
+
+      chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: selectedEx === 'Cardio (Trote)' ? 'Distancia (km)' : 'Peso Max / Usado',
+            data: pesos,
+            borderColor: '#38bdf8',
+            backgroundColor: 'rgba(56, 189, 248, 0.2)',
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: { beginAtZero: true, grid: { color: '#334155' } },
+            x: { grid: { color: '#334155' } }
+          }
+        }
+      });
+    }
+
+    // Inicialización
+    loadRoutine();
+  </script>
+</body>
+</html>
